@@ -1,68 +1,43 @@
-from db import engine, add_column, remove_column
-from sqlalchemy import create_engine
+from peewee import *
+from db import dbhandle
+import datetime
 
-from sqlalchemy import Column, Integer, String, ForeignKey, Float, DateTime, BigInteger
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
-import datetime, time
+class BaseModel(Model):
+    class Meta:
+        database = dbhandle
+ 
+ 
+class User(BaseModel):
+    class Meta:
+        db_table = "users"
+        order_by = ('id',)
 
-Base = declarative_base()
+    id = PrimaryKeyField(null=False)
+    userid = BigIntegerField(unique=True)
+    balance = FloatField(default=0.0)
 
+class Item(BaseModel):
+    class Meta:
+        db_table = "items"
+        order_by = ('id',)
 
-class User(Base):
-    __tablename__ = "users"
+    id = PrimaryKeyField(null=False)
+    owner = ForeignKeyField(User)
+    name = CharField(max_length=64)
+    amount = IntegerField(default=0)
+    created = DateTimeField(default=datetime.datetime.now)
 
-    id = Column('id', Integer, primary_key=True)
-    userid = Column('userid', BigInteger, unique=True)
-    balance = Column('balance', Float, default=0)
+class Code(BaseModel):
+    class Meta:
+        db_table = "codes"
+        order_by = ('id',)
 
-class Item(Base):
-    __tablename__ = "items"
+    id = PrimaryKeyField(null=False)
+    owner = ForeignKeyField(User)
+    code = CharField(max_length=16)
+    exp = DateTimeField(default=(datetime.datetime.now() + datetime.timedelta(days=1)))
 
-    id = Column('id', Integer, primary_key=True)
-    owner = Column('owner', ForeignKey("users.id"))
-    name = Column('name', String(64))
-    amount = Column('amount', Integer, default=0)
-    created = Column("created", DateTime, default=datetime.datetime.now)
-
-class Code(Base):
-    __tablename__ = "codes"
-
-    id = Column('id', Integer, primary_key=True)
-    owner = Column('owner', ForeignKey("users.id"))
-    code = Column('code', String(64))
-    exp = Column('expiration', DateTime, default=(datetime.datetime.now() + datetime.timedelta(days=1)), unique=True)
-
-Base.metadata.create_all(bind=engine)
-
-def make_session():
-    newengine = create_engine("mysql+mysqldb://lovequiz_nextbot:234567-sS@lovequiz.beget.tech/lovequiz_nextbot?charset=utf8", echo=False)
-    Session = sessionmaker(bind=newengine)
-
-    session = Session()
-    return session
-
-
-def verify_code(code):
-    session = make_session()
-    code_instance = session.query(Code).filter(Code.code == code)
-    if not Utils.exists(code_instance):
-        return None
-    if code_instance[0].exp < datetime.datetime.now():
-        session.delete(code_instance[0])
-        return None
-    user = session.query(User).get(code_instance[0].owner)
-    session.delete(code_instance[0])
-    session.commit()
-    return user
-
-
-class Utils:
-    def __init__(self):
-        pass
-    def exists(query):
-        if not len(list(query)) > 0:
-            return False
-        return True
-
-print(verify_code("123"))
+dbhandle.connect()
+User.create_table()
+Item.create_table()
+Code.create_table()

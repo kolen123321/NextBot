@@ -6,6 +6,7 @@ import datetime, time
 import random
 from discord.utils import get
 from validators import *
+from utils import *
 
 config = json.loads(open("config.json", "r").read())
 
@@ -35,31 +36,32 @@ def error(title="Ошибка", message="Ничего"):
     embed.add_field(name=title, value=message, inline=False)
     return embed
 
-def get_item(session, owner, item_name, create=True):
-    item = session.query(Item).filter(Item.owner == owner, Item.name == item_name)
-    if not Utils.exists(item):
+def get_item(owner, item_name, create=True):
+    check_connection()
+    item = Item.select().where(Item.owner == owner, Item.name == item_name)
+    if not item.exists():
         if create:
             item = Item()
             item.owner = owner
             item.name = item_name
-            session.add(item)
-            session.commit()
+            item.save()
         else:
             item = None
     else:
         item = item[0]
+    close_connection()
     return item
 
 
 async def create_or_get_user(ctx):
-    session = make_session()
-    user = session.query(User).filter(User.userid == ctx.author.id)
-    if not Utils.exists(user):
+    check_connection()
+    user = User.select().where(User.userid == ctx.author.id)
+    if not user.exists():
         user = User()
         user.userid = ctx.author.id
-        session.add(user)
-        session.commit()
-    user = list(session.query(User).filter(User.userid == ctx.author.id))[0]
+        user.save()
+    user = User.get(User.userid == ctx.author.id)
+    close_connection()
     return user
 
 async def nextbank(ctx):
@@ -69,11 +71,13 @@ async def nextbank(ctx):
 
 @bot.command(name="account", aliases=['a', 'acc'])
 async def account(ctx):
-    if ctx.channel.id == 827989670541393920:
+    check_connection()
+    if ctx.channel.id == config['channels']['nextbank']['client']:
         user = await create_or_get_user(ctx)
         embed=Embed(title=f"Счет {ctx.author}", color=theme['info'])
         embed.add_field(name="Баланс", value=f"{user.balance} {incline_coin(user.balance)}", inline=False)
         await ctx.send(embed=embed)
+    close_connection()
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -82,28 +86,30 @@ async def on_raw_reaction_add(payload):
 
 @bot.command(name="verify", aliases=['v'])
 async def verify(ctx, *args):
-    session = make_session()
-    if ctx.channel.id == 827989670541393920:
+    check_connection()
+    if ctx.channel.id == config['channels']['nextbank']['client']:
         if len(args) == 0:
             user = await create_or_get_user(ctx)
             verify = Code()
-            verify.owner = user.id
+            verify.owner = user
             verify.code = random.randint(1000, 9999)
-            session.add(verify)
-            session.commit()
+            verify.save()
             embed=Embed(color=theme['info'])
             embed.add_field(name="Верефикация", value=f"Ваш верефикационый код: {verify.code}\nНикому не говорите данный код", inline=False)
             message = await ctx.author.send(embed=embed)
             embed=Embed(color=theme['info'])
             embed.add_field(name="Верефикация", value=f"Я отправил код вам в личные сообщения", inline=False)
             await ctx.send(embed=embed)
-
-
-    elif ctx.guild.get_role(827988395116331048) in ctx.author.roles and ctx.channel.id == 828200330969481248:
+    elif ctx.guild.get_role(config['roles']['banker']) in ctx.author.roles and ctx.channel.id == config['channels']['nextbank']['banker']:
         if len(args) == 1:
             user = await create_or_get_user(ctx)
-            verify = session.query(Code).filter(Code.code == args[0])
-            touser = verify_code(args[0])
+            verify = Code.select().where(Code.code == args[0])
+            if verify.exists():
+                verify = Code.get(Code.code == args[0])
+            else:
+                await ctx.send(embed=error(message="Код не найден"))
+                return False
+            touser = verify_code(verify)
             embedColor = theme['info']
             if touser:
                 title = "Верефикация"
@@ -115,13 +121,14 @@ async def verify(ctx, *args):
             embed=Embed(color=embedColor)
             embed.add_field(name=title, value=message, inline=False)
             await ctx.send(embed=embed)
+    close_connection()
 
 @bot.command(name="inventory", aliases=['inv', 'i'])
 async def inventory(ctx):
-    if ctx.channel.id == 827989670541393920:
-        session = make_session()
+    check_connection()
+    if ctx.channel.id == config['channels']['nextbank']['client']:
         user = await create_or_get_user(ctx)
-        items = list(session.query(Item).filter(Item.owner == user.id))
+        items = Item.select().where(Item.owner == user.id)
         items_in_str = ""
         num = 0
         for item in items:
@@ -133,37 +140,38 @@ async def inventory(ctx):
         await ctx.send(embed=embed)
 
 @bot.command(name="give", aliases=['g'])
-async def inventory(ctx, *args):
-    if ctx.channel.id == 827989670541393920:
+async def give(ctx, *args):
+    check_connection()
+    if ctx.channel.id == config['channels']['nextbank']['client']:
         embedColor = theme['info']
         if len(args) == 3:
-            session = make_session()
             user = await create_or_get_user(ctx)
             touserid = PingValidator(args[0]).data
             if not touserid:
                 await ctx.send(embed=error(message="Поле <Клиент> введено неправильно"))
                 return False
-            touser = session.query(User).filter(User.userid == touserid)
-            if not Utils.exists(touser):
+            touser = User.select().where(User.userid == touserid)
+            if not touser.exists():
                 await ctx.send(embed=error(message="Клиент не имеет счета"))
                 return False
-            touser = touser[0]
+            touser = touser.first()
             amount = AmountValidator(args[2]).data
             if not amount:
                 await ctx.send(embed=error(message="Поле <Кол-во> введено неправильно"))
                 return False
-            item = get_item(session, user.id, args[1], create=False)
+            item = get_item(user.id, args[1], create=False)
             if not item:
                 await ctx.send(embed=error(message="У вас нет данного предмета"))
                 return False
-            toitem = get_item(session, touser.id, args[1])
+            toitem = get_item(touser.id, args[1])
             toitem.amount += amount
             item.amount -= amount
+            item.save()
+            toitem.save()
             if item.amount <= 0:
-                session.delete(item)
+                item.delete_instance()
             if toitem.amount <= 0:
-                session.delete(toitem)
-            session.commit()
+                toitem.delete_instance()
             embedColor = theme['success']
             title = "Успех"
             message = f"Вы успешно передали {item.name} x{amount} клиенту <@!{touser.userid}>"
@@ -178,6 +186,7 @@ async def inventory(ctx, *args):
 
 @bot.command(name="help")
 async def help(ctx):
+    check_connection()
     if ctx.channel.id == 827989670541393920:
         embed=Embed(title=f"NextBank - помощь", color=theme['info'])
         embed.add_field(name="!help", value="Выводит данный список", inline=False)
@@ -199,96 +208,98 @@ async def help(ctx):
 
 @bot.command(name="pay")
 async def pay(ctx, *args):
-    if ctx.channel.id == 827989670541393920:
+    check_connection()
+    if ctx.channel.id == config['channels']['nextbank']['client']:
+        embedColor = theme['success']
         if len(args) == 2:
             touser, amount = args
-            session = make_session()
+            
             user = await create_or_get_user(ctx)
-            touserid = touser.replace("<@!", "").replace(">", "")
-            try:
-                amount = float(amount)
-            except:
-                embed=Embed(color=theme['error'])
-                embed.add_field(name="Ошибка", value="Вы в вели неправильно значение \"Сумма\"", inline=False)
-                await ctx.send(embed=embed)
+            touserid = PingValidator(touser).data
+            amount = FloatAmountValidator(amount).data
+            if not amount:
+                await ctx.send(embed=error(message="Значение <Кол-во NextCoin-ов> введено неправильно"))
                 return False
-            try:
-                touserid = int(touserid)
-            except:
-                embed=Embed(color=theme['error'])
-                embed.add_field(name="Ошибка", value="Вы в вели неправильно значение \"Клиент\"", inline=False)
-                await ctx.send(embed=embed)
+            if not touserid:
+                await ctx.send(embed=error(message="Значение <Клиент> введено неправильно"))
                 return False
-            if user.balance < amount:
-                embed=Embed(color=theme['error'])
-                embed.add_field(name="Ошибка", value="У вас недостаточно средств", inline=False)
-                await ctx.send(embed=embed)
+            touser = User.select().where(User.userid == touserid)
+            if not touser.exists():
+                await ctx.send(embed=error(message="Клиент не найден"))
                 return False
-            touser = session.query(User).filter(User.userid == touserid)
-            if not Utils.exists(touser):
-                embed=Embed(color=theme['error'])
-                embed.add_field(name="Ошибка", value="Клиент не найден", inline=False)
-                await ctx.send(embed=embed)
-                return False
-            touser = list(session.query(User).filter(User.userid == touserid))[0]
-            touser.balance += amount
+            touser = User.select().where(User.userid == touserid).first()
             user.balance -= amount
-            session.commit()
-            embed=Embed(color=theme['success'])
-            embed.add_field(name="Успех", value=f"Вы успешно перевели {amount} {incline_coin(amount)} клиенту <@!{touser.userid}>", inline=False)
-            await ctx.send(embed=embed)
+            touser.balance += amount
+            touser.save()
+            user.save()
+            title = "Успех"
+            message = f"Вы успешно перевели {amount} {incline_coin(amount)} клиенту <@!{touser.userid}>"
         else:
-            embed=Embed(color=theme['info'])
-            embed.add_field(name="Команда", value=f"!pay <Клиент> <Кол-во NextCoin-ов>\n\nПример: !pay <@!708326089440886836> 10", inline=False)
-            await ctx.send(embed=embed)
+            embedColor = theme['info']
+            title = "Команда"
+            message = f"!pay <Клиент> <Кол-во NextCoin-ов>\n\nПример: !pay <@!708326089440886836> 10"
+        embed=Embed(color=embedColor)
+        embed.add_field(name=title, value=message, inline=False)
+        await ctx.send(embed=embed)
+    close_connection()
 
 
 @bot.command(name="manage")
 async def account(ctx, *args):
-    user = await create_or_get_user(ctx)
-    session = make_session()
-    if ctx.guild.get_role(827988395116331048) in ctx.author.roles and ctx.channel.id == 828200330969481248:
+    if ctx.guild.get_role(config['roles']['banker']) in ctx.author.roles and ctx.channel.id == config['channels']['nextbank']['banker']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        embedColor = theme['success']
         if len(args) > 0: action = args[0]
         if len(args) > 1: user = args[1]
         if len(args) > 2: amount = args[2]
         if len(args) > 2:
             if action == "add":
                 userid = user.replace("<@!", "").replace(">", "")
-                touser = session.query(User).filter(User.userid == userid)[0]
+                touser = User.select().where(User.userid == userid)
+                if not touser.exists():
+                    await ctx.send(embed=error(message="Клиент не найден"))
+                    return False
+                touser = touser.first()
                 touser.balance += float(amount)
-                session.commit()
-                embed = Embed(color=theme['success'])
-                embed.add_field(name=f"Успех", value=f"Вы успешно добавили {amount} {incline_coin(amount)}  клиенту <@!{touser.userid}>")
-                await ctx.send(embed=embed)
+                touser.save()
+                title = "Успех"
+                message = f"Вы успешно добавили {amount} {incline_coin(amount)} клиенту <@!{touser.userid}>"
             elif action == "remove":
                 userid = user.replace("<@!", "").replace(">", "")
-                touser = session.query(User).filter(User.userid == userid)[0]
+                touser = User.select().where(User.userid == userid)
                 amount_pr = float(amount) + (float(amount) / 100 * 5)
                 if touser.balance - amount_pr > 0:
                     amount = amount_pr
+                if not touser.exists():
+                    await ctx.send(embed=error(message="Клиент не найден"))
+                    return False
+                touser = touser.first()
                 touser.balance -= float(amount)
-                session.commit()
-                embed = Embed(color=theme['success'])
-                embed.add_field(name=f"Успех", value=f"Вы успешно сняли {amount} {incline_coin(amount)}  клиенту <@!{touser.userid}>")
-                await ctx.send(embed=embed)
+                touser.save()
+                title = "Успех"
+                message = f"Вы успешно отняли {amount} {incline_coin(amount)} у клиента <@!{touser.userid}>"
+            embed = Embed(color=embedColor)
+            embed.add_field(name=title, value=message)
+            await ctx.send(embed=embed)
+        close_connection()
 
 @bot.command(name="items")
 async def items(ctx, *args):
     user = await create_or_get_user(ctx)
-    session = make_session()
-    if ctx.guild.get_role(827988395116331048) in ctx.author.roles and ctx.channel.id == 828200330969481248:
+    if ctx.guild.get_role(config['roles']['banker']) in ctx.author.roles and ctx.channel.id == config['channels']['nextbank']['banker']:
+        check_connection()
         embedColor = theme['success']
         if len(args) > 0: action = args[0]
         if len(args) > 1: user = args[1]
         if len(args) > 2: itemName = args[2]
-        if len(args) > 3: amount = args[3]
-        if len(args) > 1:
+        if len(args) > 3: amount = AmountValidator(args[3]).data
+        if 3 > len(args) > 1:
             embedColor = theme['info']
             if action == "get":
                 userid = user.replace("<@!", "").replace(">", "")
-                touser = session.query(User).filter(User.userid == userid)[0]
-                items = session.query(Item).filter(Item.owner == touser.id)
-                embed = Embed(color=embedColor)
+                touser = User.select().where(User.userid == userid).first()
+                items = Item.select().where(Item.owner == touser)
                 items_in_str = f"Клиент <@!{touser.userid}>"
                 i = 0
                 for item in items:
@@ -296,48 +307,40 @@ async def items(ctx, *args):
                     i += 1
                     items_in_str += f"\n{i}. {item.name} x{item.amount}, дней храниться: {days}"
                 if len(list(items)) < 1:
-                    items_in_str = "Пусто..."
-                embed.add_field(name=f"Предметы", value=items_in_str)
+                    items_in_str += "\nПусто..."
+                message = f"{items_in_str}"
+                title = "Предметы"
+                embed = Embed(color=embedColor)
+                embed.add_field(name=title, value=message)
                 await ctx.send(embed=embed)
         if len(args) > 3:
             if action == "add":
-                userid = user.replace("<@!", "").replace(">", "")
-                touser = session.query(User).filter(User.userid == userid)[0]
-                if not Utils.exists(session.query(Item).filter(Item.owner == touser.id, Item.name == itemName)):
-                    item = Item()
-                    item.owner = touser.id
-                    item.amount = 0
-                    item.name = str(itemName)
-                    session.add(item)
-                    session.commit()
-                item = session.query(Item).filter(Item.owner == touser.id, Item.name == itemName)[0]
-                item.amount += int(amount)
-                session.commit()
+                touserid = user.replace("<@!", "").replace(">", "")
+                touser = User.select().where(User.userid == touserid).first()
+                item = get_item(touser, itemName)
+                item.amount += amount
+                item.save()
+                title = "Успех"
                 message = f"Вы успешно добавили предмет \"{item.name}\" x{amount} клиенту <@!{touser.userid}>"
             elif action == "remove":
-                userid = user.replace("<@!", "").replace(">", "")
-                touser = session.query(User).filter(User.userid == userid)[0]
-                if not Utils.exists(session.query(Item).filter(Item.owner == touser.id, Item.name == itemName)):
-                    item = Item()
-                    item.owner = touser.id
-                    item.amount = 0
-                    item.name = itemName
-                    session.add(item)
-                    session.commit()
-                item = session.query(Item).filter(Item.owner == touser.id, Item.name == itemName)[0]
+                touserid = user.replace("<@!", "").replace(">", "")
+                touser = User.select().where(User.userid == touserid).first()
+                item = get_item(touser, itemName)
                 if item.amount >= 0 and item.amount - int(amount) >= 0:
                     item.amount -= int(amount)
                 else:
                     message = f"Вы не можете отнять больше предметов чем есть у клиента"
                     embedColor = theme['error']
                     return False
-                if item.amount == 0:
-                    session.query(Item).filter_by(id=item.id).delete()
-                session.commit()
+                if item.amount <= 0:
+                    item.delete_instance()
+                item.save()
+                title = "Успех"
                 message = f"Вы успешно отняли предмет \"{item.name}\" x{amount} клиенту <@!{touser.userid}>"
             embed = Embed(color=embedColor)
-            embed.add_field(name="Успех", value=message)
+            embed.add_field(name=title, value=message)
             await ctx.send(embed=embed)
+        close_connection()
     
 
 bot.run(config['bot']['token'])

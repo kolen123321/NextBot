@@ -21,3 +21,14 @@ class AmountValidator(Validator):
         except:
             data = None
         self.data = data
+
+class FloatAmountValidator(Validator):
+    def __init__(self, amount):
+        self.amount = amount
+        try:
+            data = float(amount)
+            if data < 0:
+                data = None
+        except:
+            data = None
+        self.data = data
