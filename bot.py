@@ -29,6 +29,15 @@ def incline_coin(number):
         return "NextCoin-а"
     elif last_num == 5 or last_num == 6 or last_num == 7 or last_num == 8 or last_num == 9 or last_num == 0:
         return "NextCoin-ов"
+
+def incline(number, word):
+    last_num = round(float(number)) % 10
+    if last_num == 1:
+        return word
+    elif last_num == 2 or last_num == 3 or last_num == 4:
+        return f"{word}-а"
+    elif last_num == 5 or last_num == 6 or last_num == 7 or last_num == 8 or last_num == 9 or last_num == 0:
+        return f"{word}-ов"
     
 
 def error(title="Ошибка", message="Ничего"):
@@ -243,7 +252,6 @@ async def pay(ctx, *args):
         await ctx.send(embed=embed)
     close_connection()
 
-
 @bot.command(name="manage")
 async def account(ctx, *args):
     if ctx.guild.get_role(config['roles']['banker']) in ctx.author.roles and ctx.channel.id == config['channels']['nextbank']['banker']:
@@ -252,11 +260,13 @@ async def account(ctx, *args):
         embedColor = theme['success']
         if len(args) > 0: action = args[0]
         if len(args) > 1: user = args[1]
-        if len(args) > 2: amount = args[2]
+        if len(args) > 2: diamonds = args[2]
         if len(args) > 2:
             if action == "add":
                 userid = user.replace("<@!", "").replace(">", "")
                 touser = User.select().where(User.userid == userid)
+                diamonds = float(diamonds)
+                amount = diamonds
                 if not touser.exists():
                     await ctx.send(embed=error(message="Клиент не найден"))
                     return False
@@ -268,13 +278,14 @@ async def account(ctx, *args):
             elif action == "remove":
                 userid = user.replace("<@!", "").replace(">", "")
                 touser = User.select().where(User.userid == userid)
+                amount = diamonds
                 amount_pr = float(amount) + (float(amount) / 100 * 5)
-                if touser.balance - amount_pr > 0:
-                    amount = amount_pr
                 if not touser.exists():
                     await ctx.send(embed=error(message="Клиент не найден"))
                     return False
                 touser = touser.first()
+                if touser.balance - amount_pr > 0:
+                    amount = amount_pr
                 touser.balance -= float(amount)
                 touser.save()
                 title = "Успех"
