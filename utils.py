@@ -11,14 +11,15 @@ def verify_code(code):
     return code.owner
     
 def check_connection():
-    global dbhandle
-    if not dbhandle._state.closed:
-        dbhandle.close()
+    """    global dbhandle
+        if not dbhandle._state.closed:
+            dbhandle.close()"""
     if dbhandle._state.closed:
         dbhandle.connect()
 
 
 def close_connection():
-    global dbhandle
-    if not dbhandle._state.closed:
-        dbhandle.close()
+    """    global dbhandle
+        if not dbhandle._state.closed:
+            dbhandle.close()
+    """
