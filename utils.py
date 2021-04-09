@@ -19,7 +19,6 @@ def check_connection():
 
 
 def close_connection():
-    """    global dbhandle
-        if not dbhandle._state.closed:
-            dbhandle.close()
-    """
+    global dbhandle
+    if not dbhandle._state.closed:
+        dbhandle.close()
