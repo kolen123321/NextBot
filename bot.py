@@ -7,6 +7,7 @@ import random
 from discord.utils import get
 from validators import *
 from utils import *
+import discord
 
 config = json.loads(open("config.json", "r").read())
 
@@ -15,8 +16,8 @@ theme = {
     'error': 0xe40707,
     'info': 0x0784e4
 }
-
-bot = commands.Bot(command_prefix="!")
+intents = discord.Intents.all()
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 bot.remove_command('help')
 
@@ -42,6 +43,16 @@ def incline(number, word):
 
 def error(title="Ошибка", message="Ничего"):
     embed=Embed(color=theme['error'])
+    embed.add_field(name=title, value=message, inline=False)
+    return embed
+
+def info(title="Информация", message="Ничего"):
+    embed=Embed(color=theme['info'])
+    embed.add_field(name=title, value=message, inline=False)
+    return embed
+
+def success(title="Успех", message="Ничего"):
+    embed=Embed(color=theme['success'])
     embed.add_field(name=title, value=message, inline=False)
     return embed
 
@@ -212,6 +223,19 @@ async def help(ctx):
         embed.add_field(name="<Действия>", value="add - добавление счета, remove - уменьшение счета", inline=False)
         embed.add_field(name="<Клиент>", value="Пинг клиента", inline=False)
         embed.add_field(name="<Кол-во NextCoin-ов>", value="Кол-во NextCoin-ов", inline=False)
+    elif ctx.channel.id == config['channels']['nextdelivery']['client']:
+        embed=Embed(title=f"NextDelivery - помощь", color=theme['info'])
+        embed.add_field(name="!help", value="Выводит данный список", inline=False)
+        embed.add_field(name="!order <Склад откуда> <Склад куда>", value="Команда для создания заказа", inline=False)
+        embed.add_field(name="!start <Номер заказа>", value="Команда для запуска заказа после старта с вас пишут 1 NextCoin", inline=False)
+        embed.add_field(name="!orders", value="Выводит список ваших заказов", inline=False)
+        embed.add_field(name="!storages", value="Выводит список складов NextDelivery")
+    elif ctx.channel.id == config['channels']['nextdelivery']['notice']:
+        embed=Embed(title=f"NextDelivery - помощь", color=theme['info'])
+        embed.add_field(name="!help", value="Выводит данный список", inline=False)
+        embed.add_field(name="!accept <Номер заказа>", value="Команда для принятия заказа", inline=False)
+        embed.add_field(name="!delivery <Номер заказа>", value="Команда для здачи заказа", inline=False)
+        embed.add_field(name="!orders", value="Выводит список ваших принятых заказов", inline=False)
     await ctx.send(embed=embed)
 
 
@@ -251,6 +275,17 @@ async def pay(ctx, *args):
         embed.add_field(name=title, value=message, inline=False)
         await ctx.send(embed=embed)
     close_connection()
+
+@bot.command(name='cours', aliases=['c'])
+async def cours(ctx):
+    if ctx.channel.id == config['channels']['nextbank']['client']:
+        check_connection()
+        cours = Settings.get(Settings.name == "cours")
+        cours = float(cours.data)
+        embed=Embed(color=theme['info'])
+        embed.add_field(name='Курс NextCoin-а', value=f'1 NextCoin = {cours} {incline(cours, "алмаз")}', inline=False)
+        await ctx.send(embed=embed)
+        close_connection()
 
 @bot.command(name="manage")
 async def account(ctx, *args):
@@ -351,6 +386,178 @@ async def items(ctx, *args):
             embed = Embed(color=embedColor)
             embed.add_field(name=title, value=message)
             await ctx.send(embed=embed)
+        close_connection()
+
+@bot.command(name="order")
+async def order(ctx, *args):
+    if ctx.channel.id == config['channels']['nextdelivery']['client']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        from_storage, to_storage = args
+        from_storage = Storage.get(Storage.id == int(from_storage))
+        to_storage = Storage.get(Storage.id == int(to_storage))
+        
+        to_cell = Cell.select().where((Cell.order == None) & (Cell.storage == to_storage)).first()
+        from_cell = Cell.select().where((Cell.order == None) & (Cell.storage == from_storage)).first()
+        if not to_cell:
+            await ctx.send(embed=error(message="Склад <Куда> переполнен, пожалуйста попробуйте позже"))
+            return False
+        if not from_cell:
+            await ctx.send(embed=error(message="Склад <Откуда> переполнен, пожалуйста попробуйте позже"))
+            return False
+        order = Order()
+        order.owner = user
+        order.to_storage = to_storage
+        order.from_storage = from_storage
+        order.save()
+        to_cell.order = order
+        from_cell.order = order
+        to_cell.save()
+        from_cell.save()
+        await ctx.send(embed=success(message=f"Вы успешно создали заказ, ячейка <Откуда>: {from_cell.number} ячейка <Куда>: {to_cell.number}\nПосле того как положите предмет(-ы) пропишите:\n!start {order.id}"))
+        close_connection()
+
+@bot.command(name="storages")
+async def storages(ctx):
+    if ctx.channel.id == config['channels']['nextdelivery']['client']:
+        storages = Storage.select().where(1)
+        storages_in_str = ""
+        for s in storages:
+            storages_in_str += f"№{s.id} описание: {s.description} координаты: {s.coordinates}\n"
+        await ctx.send(embed=info(title="Склады NextDelivery", message=f"{storages_in_str}"))
+
+
+@bot.command(name="orders")
+async def orders(ctx, *args):
+    if ctx.channel.id == config['channels']['nextdelivery']['client']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        orders = Order.select().where(Order.owner == user)
+        orders_in_str = ""
+        for o in orders:
+            if o.status == "WAIT":
+                status = "Ждет предмет(-ы)"
+            elif o.status == "STARTED":
+                status = "Ждет курьера"
+            elif o.status == "DELIVERY":
+                status = "В пути"
+            to_cell = Cell.get((Cell.order == o) & (Cell.storage == o.to_storage))
+            from_cell = Cell.get((Cell.order == o) & (Cell.storage == o.from_storage))
+            orders_in_str += f"№{o.id} статус: {status} ячейка \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
+        if len(orders_in_str) <= 0:
+            orders_in_str = "Пусто..."
+        await ctx.send(embed=info(title="Ваши заказы",message=f"{orders_in_str}"))
+        close_connection()
+    elif ctx.channel.id == config['channels']['nextdelivery']['notice']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        orders = Order.select().where(Order.courier == user)
+        orders_in_str = ""
+        for o in orders:
+            to_cell = Cell.get((Cell.order == o) & (Cell.storage == o.to_storage))
+            from_cell = Cell.get((Cell.order == o) & (Cell.storage == o.from_storage))
+            orders_in_str += f"№{o.id} ячейка \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
+        if len(orders_in_str) <= 0:
+            orders_in_str = "Пусто..."
+        await ctx.send(embed=info(title="Ваши принятые заказы", message=f"{orders_in_str}"))
+        close_connection()
+
+import peewee
+
+@bot.command(name="start")
+async def start(ctx, *args):
+    if ctx.channel.id == config['channels']['nextdelivery']['client']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        courier_notice_channel = discord.utils.get(ctx.guild.channels, id=830148887573954640)
+        try:
+            order = Order.get(int(args[0]))
+        except peewee.DoesNotExist:
+            await ctx.send(embed=error(message="Заказ не найден"))
+            return False
+        except ValueError:
+            await ctx.send(embed=error(message="Значение <Номер заказа> введено неверно"))
+            return False
+        if order.status != "WAIT":
+            await ctx.send(embed=error(message="Заказ уже создан"))
+            return False
+        delivery_price = 1
+        if user.balance >= delivery_price:
+            user.balance -= delivery_price
+            user.save()
+        else:
+            await ctx.send(embed=error(message="У вас недостаточно средств"))
+            return False
+        order.status = "STARTED"
+        order.save()
+        to_cell = Cell.get((Cell.order == order) & (Cell.storage == order.to_storage))
+        from_cell = Cell.get((Cell.order == order) & (Cell.storage == order.from_storage))
+        await ctx.send(embed=success(message="Заказ создан\nС вас списали 1 NextCoin"))
+        from_storage = from_cell.storage.id
+        to_storage = to_cell.storage.id
+        await courier_notice_channel.send(embed=info(title="Новый заказ", message=f"Ячейка <Откуда>: {from_storage} {from_cell.number} ячейка <Куда>: {to_storage} {to_cell.number}\nДля того что-бы принять заказ пропишите:\n!accept {order.id}"))
+        close_connection()
+
+@bot.command(name="accept")
+async def start(ctx, *args):
+    if ctx.channel.id == config['channels']['nextdelivery']['notice']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        try:
+            order = Order.get(int(args[0]))
+        except peewee.DoesNotExist:
+            await ctx.send(embed=error(message="Заказ не найден"))
+            return False
+        except ValueError:
+            await ctx.send(embed=error(message="Значение <Номер заказа> введено неверно"))
+            return False
+        if order.courier:
+            await ctx.send(embed=error(message="Заказ уже взят"))
+            return False
+        if order.status == "WAIT":
+            await ctx.send(embed=error(message="Заказ еще не достиг нужной стадии"))
+            return False
+        to_user = order.owner.userid
+        to_user = discord.utils.get(ctx.guild.members, id=to_user)
+        order.status = "DELIVERY"
+        order.courier = user
+        order.save()
+        await to_user.send(embed=info(title="Уведомление NextDelivery", message=f"Ваш заказ №{order.id} был взят курьером <@!{user.userid}>"))
+        await ctx.send(embed=success(message=f"Вы успешно взяли заказ №{order.id}"))
+        close_connection()
+
+@bot.command(name="delivery")
+async def start(ctx, *args):
+    if ctx.channel.id == config['channels']['nextdelivery']['notice']:
+        check_connection()
+        user = await create_or_get_user(ctx)
+        try:
+            order = Order.get(int(args[0]))
+        except peewee.DoesNotExist:
+            await ctx.send(embed=error(message="Заказ не найден"))
+            return False
+        except ValueError:
+            await ctx.send(embed=error(message="Значение <Номер заказа> введено неверно"))
+            return False
+        if order.courier != user:
+            await ctx.send(embed=error(message="Вы не курьер данного заказа"))
+            return False
+        if order.status == "STARTED":
+            await ctx.send(embed=error(message="Заказ еще не достиг нужной стадии"))
+            return False
+        to_user = order.owner.userid
+        to_user = discord.utils.get(ctx.guild.members, id=to_user)
+        await to_user.send(embed=info(title="Уведомление NextDelivery", message=f"Ваш заказ №{order.id} был доставлен курьером <@!{user.userid}>"))
+        await ctx.send(embed=success(message=f"Вы успешно доставили заказ №{order.id}"))
+        to_cell = Cell.get((Cell.order == order) & (Cell.storage == order.to_storage))
+        from_cell = Cell.get((Cell.order == order) & (Cell.storage == order.from_storage))
+        to_cell.order = None
+        from_cell.order = None
+        to_cell.save()
+        from_cell.save()
+        user.balance += 1
+        user.save()
+        order.delete_instance()
         close_connection()
     
 

@@ -3,12 +3,17 @@
         "token": "NTUxNzMwODY3NDI1Mzc4MzI0.XHu9aQ.cHU3ccy8EPSX5yoUjUWoa4B_s2E"
     },
     "roles": {
-        "banker": 829658498635530280
+        "banker": 829658498635530280,
+        "courier": 830148068488773722
     },
     "channels":{
         "nextbank": {
             "client": 827989670541393920,
             "banker": 828200330969481248
+        },
+        "nextdelivery": {
+            "client": 830149016883822613,
+            "notice": 830148887573954640 
         }
     }
 }

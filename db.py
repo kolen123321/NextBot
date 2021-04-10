@@ -9,3 +9,9 @@ dbhandle = MySQLDatabase(
     password=password,
     host='lovequiz.beget.tech'
 )
+
+a = dbhandle.connect()
+dbhandle.commit()
+method_list = [func for func in dir(dbhandle) if callable(getattr(dbhandle, func))]
+print(method_list)
+dbhandle.close()
