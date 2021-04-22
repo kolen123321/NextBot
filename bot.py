@@ -17,7 +17,9 @@ theme = {
     'info': 0x0784e4
 }
 intents = discord.Intents.all()
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix="$", intents=intents)
+
+bank_channel = 834499751289421855
 
 bot.remove_command('help')
 
@@ -207,14 +209,14 @@ async def give(ctx, *args):
 @bot.command(name="help")
 async def help(ctx):
     check_connection()
-    if ctx.channel.id == 827989670541393920:
+    if ctx.channel.id == 827989670541393920 or ctx.channel.id == bank_channel:
         embed=Embed(title=f"NextBank - помощь", color=theme['info'])
-        embed.add_field(name="!help", value="Выводит данный список", inline=False)
-        embed.add_field(name="!account", value="Выводит ифнормацию о вашем счете", inline=False)
-        embed.add_field(name="!verify", value="Команда для получения верефикационого кода", inline=False)
-        embed.add_field(name="!pay <Клиент> <Кол-во NextCoin-ов>", value="Команда для получения верефикационого кода", inline=False)
-        embed.add_field(name="!give <Клиент> <Название предмета> <Кол-во предметов>", value="Команда для получения верефикационого кода", inline=False)
-        embed.add_field(name="!inventory или !inv", value="Выводит информацию о ваших вещах в банке", inline=False)
+        embed.add_field(name="$help", value="Выводит данный список", inline=False)
+        embed.add_field(name="$account", value="Выводит ифнормацию о вашем счете", inline=False)
+        embed.add_field(name="$verify", value="Команда для получения верефикационого кода", inline=False)
+        embed.add_field(name="$pay <Клиент> <Кол-во NextCoin-ов>", value="Команда для получения верефикационого кода", inline=False)
+        embed.add_field(name="$give <Клиент> <Название предмета> <Кол-во предметов>", value="Команда для получения верефикационого кода", inline=False)
+        embed.add_field(name="$inventory", value="Выводит информацию о ваших вещах в банке", inline=False)
     elif ctx.channel.id == 828200330969481248:
         embed=Embed(title=f"NextBank - помощь", color=theme['info'])
         embed.add_field(name="!help", value="Выводит данный список", inline=False)
