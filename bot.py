@@ -213,7 +213,7 @@ async def help(ctx):
         embed=Embed(title=f"NextBank - помощь", color=theme['info'])
         embed.add_field(name="$help", value="Выводит данный список", inline=False)
         embed.add_field(name="$account", value="Выводит ифнормацию о вашем счете", inline=False)
-        embed.add_field(name="$verify", value="Команда для получения верефикационого кода", inline=False)
+        embed.add_field(name="$verify", value="Команда для получения верификационного кода", inline=False)
         embed.add_field(name="$pay <Клиент> <Кол-во NextCoin-ов>", value="Команда для получения верефикационого кода", inline=False)
         embed.add_field(name="$give <Клиент> <Название предмета> <Кол-во предметов>", value="Команда для получения верефикационого кода", inline=False)
         embed.add_field(name="$inventory", value="Выводит информацию о ваших вещах в банке", inline=False)
