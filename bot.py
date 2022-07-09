@@ -31,13 +31,10 @@ def incline_coin(number):
         return "NextCoins"
 
 def incline(number, word):
-    last_num = round(float(number)) % 10
-    if last_num == 1:
+    if number == 1:
         return word
-    elif last_num == 2 or last_num == 3 or last_num == 4:
-        return f"{word}-а"
-    elif last_num == 5 or last_num == 6 or last_num == 7 or last_num == 8 or last_num == 9 or last_num == 0:
-        return f"{word}-ов"
+    elif number > 1:
+        return word + "s"
     
 
 def error(title="Error", message="Nothing"):
@@ -322,7 +319,7 @@ async def orders(ctx, *args):
                 status = "Wait delivery"
             to_cell = Cell.get((Cell.order == o) & (Cell.storage == o.to_storage))
             from_cell = Cell.get((Cell.order == o) & (Cell.storage == o.from_storage))
-            orders_in_str += f"№{o.id} статус: {status} ячейка \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
+            orders_in_str += f"№{o.id} status: {status} box \"From\": {from_cell.number} \"To\": {to_cell.number}\n"
         if len(orders_in_str) <= 0:
             orders_in_str = "Empty..."
         await ctx.send(embed=info(title="Your orders",message=f"{orders_in_str}"))
@@ -335,7 +332,7 @@ async def orders(ctx, *args):
         for o in orders:
             to_cell = Cell.get((Cell.order == o) & (Cell.storage == o.to_storage))
             from_cell = Cell.get((Cell.order == o) & (Cell.storage == o.from_storage))
-            orders_in_str += f"№{o.id} box \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
+            orders_in_str += f"#{o.id} box \"From\": {from_cell.number} \"To\": {to_cell.number}\n"
         if len(orders_in_str) <= 0:
             orders_in_str = "Empty..."
         await ctx.send(embed=info(title="Your orders", message=f"{orders_in_str}"))
