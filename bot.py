@@ -25,13 +25,10 @@ bot.remove_command('help')
 
 
 def incline_coin(number):
-    last_num = round(float(number)) % 10
-    if last_num == 1:
+    if number == 1:
         return "NextCoin"
-    elif last_num == 2 or last_num == 3 or last_num == 4:
-        return "NextCoin-а"
-    elif last_num == 5 or last_num == 6 or last_num == 7 or last_num == 8 or last_num == 9 or last_num == 0:
-        return "NextCoin-ов"
+    elif number > 1:
+        return "NextCoins"
 
 def incline(number, word):
     last_num = round(float(number)) % 10
@@ -43,17 +40,17 @@ def incline(number, word):
         return f"{word}-ов"
     
 
-def error(title="Ошибка", message="Ничего"):
+def error(title="Error", message="Nothing"):
     embed=Embed(color=theme['error'])
     embed.add_field(name=title, value=message, inline=False)
     return embed
 
-def info(title="Информация", message="Ничего"):
+def info(title="Info", message="Nothing"):
     embed=Embed(color=theme['info'])
     embed.add_field(name=title, value=message, inline=False)
     return embed
 
-def success(title="Успех", message="Ничего"):
+def success(title="Success", message="Nothing"):
     embed=Embed(color=theme['success'])
     embed.add_field(name=title, value=message, inline=False)
     return embed
@@ -88,7 +85,7 @@ async def create_or_get_user(ctx):
 
 async def nextbank(ctx):
     embed=Embed(color=theme['success'])
-    embed.add_field(name="NextBank", value="Сервис", inline=False)
+    embed.add_field(name="NextBank", value="Service", inline=False)
     await ctx.send(embed=embed)
 
 @bot.command(name="account", aliases=['a', 'acc'])
@@ -96,8 +93,8 @@ async def account(ctx):
     check_connection()
     if ctx.channel.id == config['channels']['nextbank']['client']:
         user = await create_or_get_user(ctx)
-        embed=Embed(title=f"Счет {ctx.author}", color=theme['info'])
-        embed.add_field(name="Баланс", value=f"{user.balance} {incline_coin(user.balance)}", inline=False)
+        embed=Embed(title=f"Account {ctx.author}", color=theme['info'])
+        embed.add_field(name="Balance", value=f"{user.balance} {incline_coin(user.balance)}", inline=False)
         await ctx.send(embed=embed)
     close_connection()
 
@@ -117,10 +114,10 @@ async def verify(ctx, *args):
             verify.code = random.randint(1000, 9999)
             verify.save()
             embed=Embed(color=theme['info'])
-            embed.add_field(name="Верефикация", value=f"Ваш верефикационый код: {verify.code}\nНикому не говорите данный код", inline=False)
+            embed.add_field(name="Verification", value=f"Your verify code: {verify.code}", inline=False)
             message = await ctx.author.send(embed=embed)
             embed=Embed(color=theme['info'])
-            embed.add_field(name="Верефикация", value=f"Я отправил код вам в личные сообщения", inline=False)
+            embed.add_field(name="Verification", value=f"I sent the code to you in private messages", inline=False)
             await ctx.send(embed=embed)
     elif ctx.guild.get_role(config['roles']['banker']) in ctx.author.roles and ctx.channel.id == config['channels']['nextbank']['banker']:
         if len(args) == 1:
@@ -129,115 +126,54 @@ async def verify(ctx, *args):
             if verify.exists():
                 verify = Code.get(Code.code == args[0])
             else:
-                await ctx.send(embed=error(message="Код не найден"))
+                await ctx.send(embed=error(message="Code is not found"))
                 return False
             touser = verify_code(verify)
             embedColor = theme['info']
             if touser:
-                title = "Верефикация"
-                message = f"Пользовотель: <@!{touser.userid}>"
+                title = "Verification"
+                message = f"User: <@!{touser.userid}>"
             else:
                 embedColor = theme['error']
-                title = "Ошибка"
-                message = "Код не найден или его срок действия истёк"
+                title = "Error"
+                message = "The code was not found or expired"
             embed=Embed(color=embedColor)
             embed.add_field(name=title, value=message, inline=False)
             await ctx.send(embed=embed)
     close_connection()
 
-@bot.command(name="inventory", aliases=['inv', 'i'])
-async def inventory(ctx):
-    check_connection()
-    if ctx.channel.id == config['channels']['nextbank']['client']:
-        user = await create_or_get_user(ctx)
-        items = Item.select().where(Item.owner == user.id)
-        items_in_str = ""
-        num = 0
-        for item in items:
-            num += 1
-            items_in_str += f"{num}. {item.name} x{item.amount}\n"
-        if len(items) < 1:
-            items_in_str = "Пусто..."
-        embed=Embed(title=f"Предметы клиента {ctx.author}", color=theme['info'], description=items_in_str)
-        await ctx.send(embed=embed)
-
-@bot.command(name="give", aliases=['g'])
-async def give(ctx, *args):
-    check_connection()
-    if ctx.channel.id == config['channels']['nextbank']['client']:
-        embedColor = theme['info']
-        if len(args) == 3:
-            user = await create_or_get_user(ctx)
-            touserid = PingValidator(args[0]).data
-            if not touserid:
-                await ctx.send(embed=error(message="Поле <Клиент> введено неправильно"))
-                return False
-            touser = User.select().where(User.userid == touserid)
-            if not touser.exists():
-                await ctx.send(embed=error(message="Клиент не имеет счета"))
-                return False
-            touser = touser.first()
-            amount = AmountValidator(args[2]).data
-            if not amount:
-                await ctx.send(embed=error(message="Поле <Кол-во> введено неправильно"))
-                return False
-            item = get_item(user.id, args[1], create=False)
-            if not item:
-                await ctx.send(embed=error(message="У вас нет данного предмета"))
-                return False
-            toitem = get_item(touser.id, args[1])
-            toitem.amount += amount
-            item.amount -= amount
-            item.save()
-            toitem.save()
-            if item.amount <= 0:
-                item.delete_instance()
-            if toitem.amount <= 0:
-                toitem.delete_instance()
-            embedColor = theme['success']
-            title = "Успех"
-            message = f"Вы успешно передали {item.name} x{amount} клиенту <@!{touser.userid}>"
-        else:
-            embedColor = theme['info']
-            title = "Команда"
-            message = "!give <Клиент> <Предмет> <Кол-во>\n\nПример: !give <@!708326089440886836> Блок_земли 64"
-        print(ctx.author.id)
-        embed=Embed(color=embedColor)
-        embed.add_field(name=title, value=message, inline=False)
-        await ctx.send(embed=embed)
-
 @bot.command(name="help")
 async def help(ctx):
     check_connection()
     if ctx.channel.id == 827989670541393920 or ctx.channel.id == bank_channel:
-        embed=Embed(title=f"NextBank - помощь", color=theme['info'])
-        embed.add_field(name="$help", value="Выводит данный список", inline=False)
-        embed.add_field(name="$account", value="Выводит ифнормацию о вашем счете", inline=False)
-        embed.add_field(name="$verify", value="Команда для получения верификационного кода", inline=False)
-        embed.add_field(name="$pay <Клиент> <Кол-во NextCoin-ов>", value="Команда для передачи NextCoin-ов клиенту NextBank", inline=False)
-        embed.add_field(name="$give <Клиент> <Название предмета> <Кол-во предметов>", value="Команда для передачи предметов клиенту NextBank", inline=False)
-        embed.add_field(name="$inventory", value="Выводит информацию о ваших вещах в банке", inline=False)
+        embed=Embed(title=f"NextBank - help", color=theme['info'])
+        embed.add_field(name="$help", value="Outputs this list", inline=False)
+        embed.add_field(name="$account", value="Displays ifnormation about your account", inline=False)
+        embed.add_field(name="$verify", value="Command to get verification code", inline=False)
+        embed.add_field(name="$pay <Client> <Number of nextcoins>", value="Command to transfer nextcoins to the NextBank client", inline=False)
+        embed.add_field(name="$give <Client> <Item name> <Number of items>", value="Command to transfer items to NextBank client", inline=False)
+        embed.add_field(name="$inventory", value="Displays information about your things in the bank", inline=False)
     elif ctx.channel.id == 828200330969481248:
-        embed=Embed(title=f"NextBank - помощь", color=theme['info'])
-        embed.add_field(name="!help", value="Выводит данный список", inline=False)
-        embed.add_field(name="!manage <Действие> <Клиент> <Кол-во NextCoin-ов>", value="Команда для банкиров", inline=False)
-        embed.add_field(name="!verify <Код>", value="Команда для верефикации клиента", inline=False)
-        embed.add_field(name="<Действия>", value="add - добавление счета, remove - уменьшение счета", inline=False)
-        embed.add_field(name="<Клиент>", value="Пинг клиента", inline=False)
-        embed.add_field(name="<Кол-во NextCoin-ов>", value="Кол-во NextCoin-ов", inline=False)
+        embed=Embed(title=f"NextBank - help", color=theme['info'])
+        embed.add_field(name="!help", value="Outputs this list", inline=False)
+        embed.add_field(name="!manage <Action> <Client> <Number of nextcoins>", value="Team for bankers", inline=False)
+        embed.add_field(name="!verify <Code>", value="Client verification command", inline=False)
+        embed.add_field(name="<Actions>", value="add - adding an invoice, remove - reducing an invoice", inline=False)
+        embed.add_field(name="<Client>", value="Client ping", inline=False)
+        embed.add_field(name="<Number of nextcoins>", value="Number of nextcoins", inline=False)
     elif ctx.channel.id == config['channels']['nextdelivery']['client']:
-        embed=Embed(title=f"NextDelivery - помощь", color=theme['info'])
-        embed.add_field(name="!help", value="Выводит данный список", inline=False)
-        embed.add_field(name="!order <Склад откуда> <Склад куда>", value="Команда для создания заказа", inline=False)
-        embed.add_field(name="!start <Номер заказа>", value="Команда для запуска заказа после старта с вас пишут 1 NextCoin", inline=False)
-        embed.add_field(name="!orders", value="Выводит список ваших заказов", inline=False)
-        embed.add_field(name="!storages", value="Выводит список складов NextDelivery")
+        embed=Embed(title=f"NextDelivery - help", color=theme['info'])
+        embed.add_field(name="!help", value="Outputs this list", inline=False)
+        embed.add_field(name="!order <Warehouse from where> <Warehouse to where>", value="Command to create an order", inline=False)
+        embed.add_field(name="!start <Order number>", value="Command to start an order after the start they write 1 NextCoin from you", inline=False)
+        embed.add_field(name="!orders", value="Displays a list of your orders", inline=False)
+        embed.add_field(name="!stores", value="Displays a list of NextDelivery warehouses")
     elif ctx.channel.id == config['channels']['nextdelivery']['notice']:
-        embed=Embed(title=f"NextDelivery - помощь", color=theme['info'])
-        embed.add_field(name="!help", value="Выводит данный список", inline=False)
-        embed.add_field(name="!accept <Номер заказа>", value="Команда для принятия заказа", inline=False)
-        embed.add_field(name="!delivery <Номер заказа>", value="Команда для здачи заказа", inline=False)
-        embed.add_field(name="!orders", value="Выводит список ваших принятых заказов", inline=False)
+        embed=Embed(title=f"NextDelivery - help", color=theme['info'])
+        embed.add_field(name="!help", value="Outputs this list", inline=False)
+        embed.add_field(name="!accept <Order number>", value="Command to accept the order", inline=False)
+        embed.add_field(name="!delivery <Order number>", value="Command to place an order", inline=False)
+        embed.add_field(name="!orders", value="Displays a list of your accepted orders", inline=False)
     await ctx.send(embed=embed)
 
 
@@ -253,26 +189,26 @@ async def pay(ctx, *args):
             touserid = PingValidator(touser).data
             amount = FloatAmountValidator(amount).data
             if not amount:
-                await ctx.send(embed=error(message="Значение <Кол-во NextCoin-ов> введено неправильно"))
+                await ctx.send(embed=error(message="The value of <Count NextCoins> is entered incorrectly"))
                 return False
             if not touserid:
-                await ctx.send(embed=error(message="Значение <Клиент> введено неправильно"))
+                await ctx.send(embed=error(message="The value <Client> is entered incorrectly"))
                 return False
             touser = User.select().where(User.userid == touserid)
             if not touser.exists():
-                await ctx.send(embed=error(message="Клиент не найден"))
+                await ctx.send(embed=error(message="Client not found"))
                 return False
             touser = User.select().where(User.userid == touserid).first()
             user.balance -= amount
             touser.balance += amount
             touser.save()
             user.save()
-            title = "Успех"
-            message = f"Вы успешно перевели {amount} {incline_coin(amount)} клиенту <@!{touser.userid}>"
+            title = "Success"
+            message = f"You have successfully transferred {amount} {incline_coin(amount)} to <@!{touser.userid}>"
         else:
             embedColor = theme['info']
-            title = "Команда"
-            message = f"!pay <Клиент> <Кол-во NextCoin-ов>\n\nПример: !pay <@!708326089440886836> 10"
+            title = "Command"
+            message = f"!pay <Client> <Count NextCoin-ов>\n\nExample: !pay <@!708326089440886836> 10"
         embed=Embed(color=embedColor)
         embed.add_field(name=title, value=message, inline=False)
         await ctx.send(embed=embed)
@@ -285,7 +221,7 @@ async def cours(ctx):
         cours = Settings.get(Settings.name == "cours")
         cours = float(cours.data)
         embed=Embed(color=theme['info'])
-        embed.add_field(name='Курс NextCoin-а', value=f'1 NextCoin = {cours} {incline(cours, "алмаз")}', inline=False)
+        embed.add_field(name='NextCoin', value=f'1 NextCoin = {cours} {incline(cours, "diamond")}', inline=False)
         await ctx.send(embed=embed)
         close_connection()
 
@@ -305,20 +241,20 @@ async def account(ctx, *args):
                 diamonds = float(diamonds)
                 amount = diamonds
                 if not touser.exists():
-                    await ctx.send(embed=error(message="Клиент не найден"))
+                    await ctx.send(embed=error(message="Client is not found"))
                     return False
                 touser = touser.first()
                 touser.balance += float(amount)
                 touser.save()
-                title = "Успех"
-                message = f"Вы успешно добавили {amount} {incline_coin(amount)} клиенту <@!{touser.userid}>"
+                title = "success"
+                message = f"You have successfully added {amount} {incline_coin(amount)} to <@!{touser.userid}>"
             elif action == "remove":
                 userid = user.replace("<@!", "").replace(">", "")
                 touser = User.select().where(User.userid == userid)
                 amount = diamonds
                 amount_pr = float(amount) + (float(amount) / 100 * 5)
                 if not touser.exists():
-                    await ctx.send(embed=error(message="Клиент не найден"))
+                    await ctx.send(embed=error(message="Client is not found"))
                     return False
                 touser = touser.first()
                 if touser.balance - amount_pr > 0:
@@ -326,65 +262,7 @@ async def account(ctx, *args):
                 touser.balance -= float(amount)
                 touser.save()
                 title = "Успех"
-                message = f"Вы успешно отняли {amount} {incline_coin(amount)} у клиента <@!{touser.userid}>"
-            embed = Embed(color=embedColor)
-            embed.add_field(name=title, value=message)
-            await ctx.send(embed=embed)
-        close_connection()
-
-@bot.command(name="items")
-async def items(ctx, *args):
-    user = await create_or_get_user(ctx)
-    if ctx.guild.get_role(config['roles']['banker']) in ctx.author.roles and ctx.channel.id == config['channels']['nextbank']['banker']:
-        check_connection()
-        embedColor = theme['success']
-        if len(args) > 0: action = args[0]
-        if len(args) > 1: user = args[1]
-        if len(args) > 2: itemName = args[2]
-        if len(args) > 3: amount = AmountValidator(args[3]).data
-        if 3 > len(args) > 1:
-            embedColor = theme['info']
-            if action == "get":
-                userid = user.replace("<@!", "").replace(">", "")
-                touser = User.select().where(User.userid == userid).first()
-                items = Item.select().where(Item.owner == touser)
-                items_in_str = f"Клиент <@!{touser.userid}>"
-                i = 0
-                for item in items:
-                    days = round((datetime.datetime.now() - item.created).total_seconds() / 60 / 60 / 24, 1)
-                    i += 1
-                    items_in_str += f"\n{i}. {item.name} x{item.amount}, дней храниться: {days}"
-                if len(list(items)) < 1:
-                    items_in_str += "\nПусто..."
-                message = f"{items_in_str}"
-                title = "Предметы"
-                embed = Embed(color=embedColor)
-                embed.add_field(name=title, value=message)
-                await ctx.send(embed=embed)
-        if len(args) > 3:
-            if action == "add":
-                touserid = user.replace("<@!", "").replace(">", "")
-                touser = User.select().where(User.userid == touserid).first()
-                item = get_item(touser, itemName)
-                item.amount += amount
-                item.save()
-                title = "Успех"
-                message = f"Вы успешно добавили предмет \"{item.name}\" x{amount} клиенту <@!{touser.userid}>"
-            elif action == "remove":
-                touserid = user.replace("<@!", "").replace(">", "")
-                touser = User.select().where(User.userid == touserid).first()
-                item = get_item(touser, itemName)
-                if item.amount >= 0 and item.amount - int(amount) >= 0:
-                    item.amount -= int(amount)
-                else:
-                    message = f"Вы не можете отнять больше предметов чем есть у клиента"
-                    embedColor = theme['error']
-                    return False
-                if item.amount <= 0:
-                    item.delete_instance()
-                item.save()
-                title = "Успех"
-                message = f"Вы успешно отняли предмет \"{item.name}\" x{amount} клиенту <@!{touser.userid}>"
+                message = f"You have successfully taken away {amount} {incline_coin(amount)} from <@!{touser.userid}>"
             embed = Embed(color=embedColor)
             embed.add_field(name=title, value=message)
             await ctx.send(embed=embed)
@@ -402,10 +280,10 @@ async def order(ctx, *args):
         to_cell = Cell.select().where((Cell.order == None) & (Cell.storage == to_storage)).first()
         from_cell = Cell.select().where((Cell.order == None) & (Cell.storage == from_storage)).first()
         if not to_cell:
-            await ctx.send(embed=error(message="Склад <Куда> переполнен, пожалуйста попробуйте позже"))
+            await ctx.send(embed=error(message="The warehouse <Where> is full, please try again later"))
             return False
         if not from_cell:
-            await ctx.send(embed=error(message="Склад <Откуда> переполнен, пожалуйста попробуйте позже"))
+            await ctx.send(embed=error(message="The warehouse <From Where> is full, please try again later"))
             return False
         order = Order()
         order.owner = user
@@ -416,7 +294,7 @@ async def order(ctx, *args):
         from_cell.order = order
         to_cell.save()
         from_cell.save()
-        await ctx.send(embed=success(message=f"Вы успешно создали заказ, ячейка <Откуда>: {from_cell.number} ячейка <Куда>: {to_cell.number}\nПосле того как положите предмет(-ы) пропишите:\n!start {order.id}"))
+        await ctx.send(embed=success(message=f"You have successfully created an order, cell <From>: {from_cell.number} box <to>: {to_cell.number}\nAfter you put the item(s), write:\n!start {order.id}"))
         close_connection()
 
 @bot.command(name="storages")
@@ -425,9 +303,8 @@ async def storages(ctx):
         storages = Storage.select().where(1)
         storages_in_str = ""
         for s in storages:
-            storages_in_str += f"№{s.id} описание: {s.description} координаты: {s.coordinates}\n"
-        await ctx.send(embed=info(title="Склады NextDelivery", message=f"{storages_in_str}"))
-
+            storages_in_str += f"№{s.id} description: {s.description} coordinates: {s.coordinates}\n"
+        await ctx.send(embed=info(title="Storages NextDelivery", message=f"{storages_in_str}"))
 
 @bot.command(name="orders")
 async def orders(ctx, *args):
@@ -438,17 +315,17 @@ async def orders(ctx, *args):
         orders_in_str = ""
         for o in orders:
             if o.status == "WAIT":
-                status = "Ждет предмет(-ы)"
+                status = "Wait items"
             elif o.status == "STARTED":
-                status = "Ждет курьера"
+                status = "Wait deliveryman"
             elif o.status == "DELIVERY":
-                status = "В пути"
+                status = "Wait delivery"
             to_cell = Cell.get((Cell.order == o) & (Cell.storage == o.to_storage))
             from_cell = Cell.get((Cell.order == o) & (Cell.storage == o.from_storage))
             orders_in_str += f"№{o.id} статус: {status} ячейка \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
         if len(orders_in_str) <= 0:
-            orders_in_str = "Пусто..."
-        await ctx.send(embed=info(title="Ваши заказы",message=f"{orders_in_str}"))
+            orders_in_str = "Empty..."
+        await ctx.send(embed=info(title="Your orders",message=f"{orders_in_str}"))
         close_connection()
     elif ctx.channel.id == config['channels']['nextdelivery']['notice']:
         check_connection()
@@ -458,10 +335,10 @@ async def orders(ctx, *args):
         for o in orders:
             to_cell = Cell.get((Cell.order == o) & (Cell.storage == o.to_storage))
             from_cell = Cell.get((Cell.order == o) & (Cell.storage == o.from_storage))
-            orders_in_str += f"№{o.id} ячейка \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
+            orders_in_str += f"№{o.id} box \"Откуда\": {from_cell.number} \"Куда\": {to_cell.number}\n"
         if len(orders_in_str) <= 0:
-            orders_in_str = "Пусто..."
-        await ctx.send(embed=info(title="Ваши принятые заказы", message=f"{orders_in_str}"))
+            orders_in_str = "Empty..."
+        await ctx.send(embed=info(title="Your orders", message=f"{orders_in_str}"))
         close_connection()
 
 import peewee
@@ -475,29 +352,29 @@ async def start(ctx, *args):
         try:
             order = Order.get(int(args[0]))
         except peewee.DoesNotExist:
-            await ctx.send(embed=error(message="Заказ не найден"))
+            await ctx.send(embed=error(message="Order is not found"))
             return False
         except ValueError:
-            await ctx.send(embed=error(message="Значение <Номер заказа> введено неверно"))
+            await ctx.send(embed=error(message="Value <Number of order> entered incorrect"))
             return False
         if order.status != "WAIT":
-            await ctx.send(embed=error(message="Заказ уже создан"))
+            await ctx.send(embed=error(message="Order is already created"))
             return False
         delivery_price = 1
         if user.balance >= delivery_price:
             user.balance -= delivery_price
             user.save()
         else:
-            await ctx.send(embed=error(message="У вас недостаточно средств"))
+            await ctx.send(embed=error(message="You don't have enough funds"))
             return False
         order.status = "STARTED"
         order.save()
         to_cell = Cell.get((Cell.order == order) & (Cell.storage == order.to_storage))
         from_cell = Cell.get((Cell.order == order) & (Cell.storage == order.from_storage))
-        await ctx.send(embed=success(message="Заказ создан\nС вас списали 1 NextCoin"))
+        await ctx.send(embed=success(message="Order is created"))
         from_storage = from_cell.storage.id
         to_storage = to_cell.storage.id
-        await courier_notice_channel.send(embed=info(title="Новый заказ", message=f"Ячейка <Откуда>: {from_storage} {from_cell.number} ячейка <Куда>: {to_storage} {to_cell.number}\nДля того что-бы принять заказ пропишите:\n!accept {order.id}"))
+        await courier_notice_channel.send(embed=info(title="New order", message=f"Box <from>: {from_storage} {from_cell.number} box <to>: {to_storage} {to_cell.number}\nIn order to accept the order, please register:\n!accept {order.id}"))
         close_connection()
 
 @bot.command(name="accept")
@@ -508,24 +385,24 @@ async def start(ctx, *args):
         try:
             order = Order.get(int(args[0]))
         except peewee.DoesNotExist:
-            await ctx.send(embed=error(message="Заказ не найден"))
+            await ctx.send(embed=error(message="Order not found"))
             return False
         except ValueError:
-            await ctx.send(embed=error(message="Значение <Номер заказа> введено неверно"))
+            await ctx.send(embed=error(message="The value <Order number> is entered incorrectly"))
             return False
         if order.courier:
-            await ctx.send(embed=error(message="Заказ уже взят"))
+            await ctx.send(embed=error(message="The order has already been taken"))
             return False
         if order.status == "WAIT":
-            await ctx.send(embed=error(message="Заказ еще не достиг нужной стадии"))
+            await ctx.send(embed=error(message="The order has not reached the required stage yet"))
             return False
         to_user = order.owner.userid
         to_user = discord.utils.get(ctx.guild.members, id=to_user)
         order.status = "DELIVERY"
         order.courier = user
         order.save()
-        await to_user.send(embed=info(title="Уведомление NextDelivery", message=f"Ваш заказ №{order.id} был взят курьером <@!{user.userid}>"))
-        await ctx.send(embed=success(message=f"Вы успешно взяли заказ №{order.id}"))
+        await to_user.send(embed=info(title="NextDelivery Notification", message=f"Your order No.{order.id } was taken by courier<@!{user.userid}>"))
+        await ctx.send(embed=success(message=f"You have successfully taken the order #{order.id}"))
         close_connection()
 
 @bot.command(name="delivery")
@@ -536,21 +413,21 @@ async def start(ctx, *args):
         try:
             order = Order.get(int(args[0]))
         except peewee.DoesNotExist:
-            await ctx.send(embed=error(message="Заказ не найден"))
+            await ctx.send(embed=error(message="Order not found"))
             return False
         except ValueError:
-            await ctx.send(embed=error(message="Значение <Номер заказа> введено неверно"))
+            await ctx.send(embed=error(message="The value <Order number> is entered incorrectly"))
             return False
         if order.courier != user:
-            await ctx.send(embed=error(message="Вы не курьер данного заказа"))
+            await ctx.send(embed=error(message="You are not the courier of this order"))
             return False
-        if order.status == "STARTED":
-            await ctx.send(embed=error(message="Заказ еще не достиг нужной стадии"))
+         if order.status == "STARTED":
+            await ctx.send(embed=error(message="The order has not reached the required stage yet"))
             return False
         to_user = order.owner.userid
         to_user = discord.utils.get(ctx.guild.members, id=to_user)
-        await to_user.send(embed=info(title="Уведомление NextDelivery", message=f"Ваш заказ №{order.id} был доставлен курьером <@!{user.userid}>"))
-        await ctx.send(embed=success(message=f"Вы успешно доставили заказ №{order.id}"))
+        await to_user.send(embed=info(title="NextDelivery Notification", message=f"Your order No.{order.id } was delivered by courier<@!{user.userid}>"))
+        await ctx.send(embed=success(message=f"You have successfully delivered order #{order.id}"))
         to_cell = Cell.get((Cell.order == order) & (Cell.storage == order.to_storage))
         from_cell = Cell.get((Cell.order == order) & (Cell.storage == order.from_storage))
         to_cell.order = None
